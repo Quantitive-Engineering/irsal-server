@@ -1,0 +1,48 @@
+name: Sync with upstream Stalwart Mail Server
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # daily at 2am UTC
+  workflow_dispatch: # allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout irsal-server
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "irsal-bot"
+          git config user.email "support@irsal.cloud"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/stalwartlabs/mail-server.git || true
+
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      - name: Checkout or create sync branch
+        run: |
+          git checkout sync/upstream 2>/dev/null || git checkout -b sync/upstream
+
+      - name: Merge upstream main
+        run: git merge upstream/main --no-edit || true
+
+      - name: Push sync branch
+        run: git push origin sync/upstream
+
+      - name: Open PR if changes exist
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          gh pr create \
+            --base main \
+            --head sync/upstream \
+            --title "chore: sync with upstream stalwart $(date +'%Y-%m-%d')" \
+            --body "Automated upstream sync from stalwartlabs/mail-server. Review before merging into main." \
+            || echo "PR already exists or no changes"
